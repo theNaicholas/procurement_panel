@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, private">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Item Management</title>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background-color: #f4f5f7; }
+        .app-container { display: flex; flex-direction: column; height: 100vh; max-height: 100vh; }
+        .toolbar { flex: 0 0 auto; background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; z-index: 10; }
+        .workspace { display: flex; flex: 1; overflow: hidden; position: relative; height: 100%; }
+        .list-view { flex: 1; overflow-y: auto; overflow-x: auto; height: 100%; position: relative; }
+
+        .cursor-pointer { cursor: pointer; user-select: none; }
+        .cursor-pointer:hover { background-color: #e2e6ea; }
+
+        .custom-table { width: max-content; min-width: 100%; background: white; font-size: 12px; border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+        .custom-table th { position: sticky; top: 0; background: #f8f9fa; z-index: 2; padding: 10px 8px; border-bottom: 1px solid #ddd; font-weight: 600; color: #495057; white-space: nowrap; }
+        .custom-table td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: middle; color: #333; overflow: hidden; text-overflow: ellipsis; }
+        .custom-table > tbody:nth-child(odd) > tr > td { background-color: #ffffff; }
+        .custom-table > tbody:nth-child(even) > tr > td { background-color: #fcfcfc; }
+        .custom-table > tbody > tr:hover > td { background-color: #f1f3f5; }
+
+        footer, .page-footer { display: none !important; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 1050; display: flex; justify-content: center; align-items: center; }
+        .item-modal-content { background: white; padding: 22px; border-radius: 8px; width: 980px; max-width: 96%; max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+
+        .item-thumb { width: 38px; height: 38px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; background: #f8fafc; }
+        .item-thumb-lg { width: 120px; height: 120px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0; background: #f8fafc; }
+        .qty-pos { color: #198754; font-weight: 700; }
+        .qty-zero { color: #94a3b8; }
+        .tab-btn { border: 1px solid #ced4da; background: #fff; color: #495057; font-weight: 600; font-size: 13px; padding: 6px 14px; }
+        .tab-btn.active { background: #0d6efd; color: #fff; border-color: #0d6efd; }
+        .tab-btn:disabled { opacity: 0.45; cursor: not-allowed; background: #e9ecef; color: #6c757d; }
+
+        .ac-wrap { position: relative; }
+        .ac-list { position: absolute; top: 100%; left: 0; width: 100%; background: white; border: 1px solid #ced4da; border-radius: 4px; z-index: 1200; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .ac-item { padding: 6px 12px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f1f3f5; }
+        .ac-item:hover { background-color: #e9ecef; }
+
+        .login-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .login-card { background: #ffffff; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.12); width: 100%; max-width: 420px; padding: 40px 36px 32px; text-align: center; }
+        .login-logo { max-height: 64px; margin-bottom: 18px; display: block; margin-left: auto; margin-right: auto; }
+        .login-title { font-size: 22px; font-weight: 700; color: #1e293b; margin-bottom: 6px; }
+        .login-subtitle { font-size: 13px; color: #64748b; margin-bottom: 28px; }
+        .login-form .form-control { height: 46px; font-size: 15px; border-radius: 8px; border: 1px solid #cbd5e1; }
+        .login-btn { height: 46px; font-size: 15px; font-weight: 600; border-radius: 8px; width: 100%; margin-top: 8px; }
+        .login-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 6px; padding: 10px 14px; font-size: 13px; margin-bottom: 16px; text-align: left; }
+    </style>
+</head>
+<body>
+{% raw %}
+<div id="app" class="app-container">
+
+    <div v-if="!isLoggedIn" class="login-screen">
+        <div class="login-card">
+            <img src="/assets/my_custom_app/images/gl_logo.png"
+                 alt="GL General Industries Corp"
+                 class="login-logo"
+                 onerror="this.style.display='none'">
+            <div class="login-title">GL General Industries Corp</div>
+            <div class="login-subtitle">Sign in to Item Management</div>
+
+            <div v-if="loginError" class="login-error">
+                <i class="fas fa-exclamation-circle me-1"></i>{{ loginError }}
+            </div>
+
+            <form class="login-form" @submit.prevent="doLogin">
+                <div class="mb-3 text-start">
+                    <label class="form-label small fw-bold text-muted mb-1">Username / Email</label>
+                    <input type="text" class="form-control" v-model="loginUsername" autocomplete="username" required autofocus placeholder="e.g. 114@glgeneralindustries.com">
+                </div>
+                <div class="mb-3 text-start">
+                    <label class="form-label small fw-bold text-muted mb-1">Password</label>
+                    <input type="password" class="form-control" v-model="loginPassword" autocomplete="current-password" required placeholder="••••••••">
+                </div>
+                <button type="submit" class="btn btn-primary login-btn" :disabled="isLoggingIn">
+                    <i v-if="isLoggingIn" class="fas fa-circle-notch fa-spin me-2"></i>
+                    {{ isLoggingIn ? 'Signing in…' : 'Sign In' }}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <template v-else>
+        <div class="toolbar">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <h4 class="m-0 fw-bold text-primary">Item Management</h4>
+                    <div class="btn-group" role="group">
+                        <button class="tab-btn" :class="{ active: activeTab === 'inventory' }" @click="switchTab('inventory')">
+                            <i class="fas fa-boxes me-1"></i> Inventory
+                        </button>
+                        <button class="tab-btn" :class="{ active: activeTab === 'price_lists' }" @click="switchTab('price_lists')">
+                            <i class="fas fa-tags me-1"></i> Price Lists
+                        </button>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <a class="btn btn-sm btn-outline-secondary fw-bold shadow-sm"
+                       href="https://glintranet.com/app/item"
+                       target="_blank"
+                       rel="noopener">
+                        <i class="fas fa-list me-1"></i> Item List
+                    </a>
+                    <a class="btn btn-sm btn-outline-success fw-bold shadow-sm"
+                       href="https://glintranet.com/app/item/new-item-1"
+                       target="_blank"
+                       rel="noopener">
+                        <i class="fas fa-plus me-1"></i> Create Item
+                    </a>
+                    <a class="btn btn-sm btn-outline-primary fw-bold shadow-sm"
+                       href="https://glintranet.com/app/stock-entry/new-stock-entry"
+                       target="_blank"
+                       rel="noopener">
+                        <i class="fas fa-exchange-alt me-1"></i> Stock Entry
+                    </a>
+                    <a class="btn btn-sm btn-outline-success fw-bold shadow-sm"
+                       href="https://glintranet.com/app/price-list/new-price-list-1"
+                       target="_blank"
+                       rel="noopener">
+                        <i class="fas fa-tags me-1"></i> Add Price List
+                    </a>
+                    <button class="btn btn-sm btn-light shadow-sm" @click="manualRefresh">
+                        <i class="fas fa-sync-alt" :class="{'fa-spin': loading || plLoading}"></i> Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'inventory'" class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="input-group input-group-sm" style="width: 320px;">
+                        <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text"
+                               class="form-control"
+                               v-model="searchInput"
+                               placeholder="Search item, warehouse, brand, part number…"
+                               @keyup.enter="applySearch">
+                        <button class="btn btn-outline-secondary" type="button" v-if="searchInput || searchQuery" @click="clearSearch">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-primary fw-bold" type="button" @click="applySearch" :disabled="!(searchInput || '').trim()">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                    </div>
+
+                    <select class="form-select form-select-sm" style="width: 220px;" v-model="warehouseFilter" @change="currentPage = 1; fetchData()">
+                        <option value="">All Warehouses</option>
+                        <option v-for="wh in warehouses" :key="wh" :value="wh">{{ wh }}</option>
+                    </select>
+
+                    <div class="form-check mb-0 ms-1">
+                        <input class="form-check-input" type="checkbox" id="hideZeroQty" v-model="hideZeroQty" @change="currentPage = 1; fetchData()">
+                        <label class="form-check-label small fw-bold" for="hideZeroQty">Hide zero qty</label>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-column align-items-end">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <select class="form-select form-select-sm" style="width: 80px; height: 24px; padding: 2px 24px 2px 8px; font-size: 11px;" v-model="pageLength" @change="currentPage = 1; fetchData()">
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                            <option :value="200">200</option>
+                            <option :value="500">500</option>
+                        </select>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="currentPage = 1; fetchData()" :disabled="currentPage <= 1"><i class="fas fa-angle-double-left"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="changePage(-1)" :disabled="currentPage <= 1"><i class="fas fa-chevron-left"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="changePage(1)" :disabled="currentPage >= totalPages"><i class="fas fa-chevron-right"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="currentPage = totalPages; fetchData()" :disabled="currentPage >= totalPages"><i class="fas fa-angle-double-right"></i></button>
+                        </div>
+                    </div>
+                    <span class="text-muted" style="font-size: 10px; font-weight: bold;">
+                        Page {{ currentPage }} of {{ totalPages }}
+                        <span class="fw-normal">({{ (totalRecords || 0).toLocaleString() }} total)</span>
+                    </span>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'price_lists'" class="d-flex align-items-start justify-content-between gap-2 flex-wrap">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <button v-if="plView === 'items'"
+                            class="btn btn-sm btn-outline-secondary fw-bold"
+                            @click="closePriceList">
+                        <i class="fas fa-arrow-left me-1"></i> All Price Lists
+                    </button>
+                    <div class="input-group input-group-sm" style="width: 320px;">
+                        <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text"
+                               class="form-control"
+                               v-model="plSearchInput"
+                               :placeholder="plView === 'items' ? 'Search item, brand, part number…' : 'Search price list or assignee…'"
+                               @keyup.enter="applyPriceListSearch">
+                        <button class="btn btn-outline-secondary" type="button" v-if="plSearchInput || plSearchQuery" @click="clearPriceListSearch">
+                            <i class="fas fa-times"></i>
+                        </button>
+                        <button class="btn btn-primary fw-bold" type="button" @click="applyPriceListSearch" :disabled="!(plSearchInput || '').trim()">
+                            <i class="fas fa-search me-1"></i>Search
+                        </button>
+                    </div>
+                    <div v-if="plView === 'lists'" class="form-check mb-0 ms-1">
+                        <input class="form-check-input" type="checkbox" id="hideDisabledPl" v-model="plHideDisabled" @change="plCurrentPage = 1; fetchPriceLists()">
+                        <label class="form-check-label small fw-bold" for="hideDisabledPl">Hide disabled</label>
+                    </div>
+                    <div v-if="plView === 'items' && selectedPriceList" class="small">
+                        <span class="fw-bold text-primary">{{ selectedPriceList.PRICE_LIST }}</span>
+                        <span class="text-muted ms-1">{{ selectedPriceList.CURRENCY || '' }}</span>
+                        <span v-if="selectedPriceList.assigned_to" class="text-muted ms-2" :title="selectedPriceList.assigned_to">
+                            <i class="fas fa-user me-1"></i>{{ selectedPriceList.assigned_to }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-column align-items-end">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <select class="form-select form-select-sm" style="width: 80px; height: 24px; padding: 2px 24px 2px 8px; font-size: 11px;" v-model="plPageLength" @change="plCurrentPage = 1; fetchPriceListView()">
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                            <option :value="200">200</option>
+                            <option :value="500">500</option>
+                        </select>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="plCurrentPage = 1; fetchPriceListView()" :disabled="plCurrentPage <= 1"><i class="fas fa-angle-double-left"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="changePlPage(-1)" :disabled="plCurrentPage <= 1"><i class="fas fa-chevron-left"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="changePlPage(1)" :disabled="plCurrentPage >= plTotalPages"><i class="fas fa-chevron-right"></i></button>
+                            <button class="btn btn-light py-0 px-2" style="height: 24px;" @click="plCurrentPage = plTotalPages; fetchPriceListView()" :disabled="plCurrentPage >= plTotalPages"><i class="fas fa-angle-double-right"></i></button>
+                        </div>
+                    </div>
+                    <span class="text-muted" style="font-size: 10px; font-weight: bold;">
+                        Page {{ plCurrentPage }} of {{ plTotalPages }}
+                        <span class="fw-normal">({{ (plTotalRecords || 0).toLocaleString() }} total)</span>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <div v-if="activeTab === 'inventory'" class="list-view">
+                <table class="custom-table">
+                    <colgroup>
+                        <col style="width: 56px;">
+                        <col style="width: 110px;">
+                        <col style="width: 220px;">
+                        <col style="width: 200px;">
+                        <col style="width: 100px;">
+                        <col style="width: 140px;">
+                        <col style="width: 160px;">
+                        <col style="width: 120px;">
+                        <col style="width: 170px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Pic</th>
+                            <th class="cursor-pointer" @click="sortBy('ITEM_CODE')">Item ID <i class="fas" :class="getSortIcon('ITEM_CODE')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('ITEM_NAME')">Item Name <i class="fas" :class="getSortIcon('ITEM_NAME')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('WAREHOUSE')">Warehouse <i class="fas" :class="getSortIcon('WAREHOUSE')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('ACTUAL_QTY')">Actual Qty <i class="fas" :class="getSortIcon('ACTUAL_QTY')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('BRAND')">Brand <i class="fas" :class="getSortIcon('BRAND')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('PART_NUMBER')">Part Number <i class="fas" :class="getSortIcon('PART_NUMBER')"></i></th>
+                            <th class="cursor-pointer" @click="sortBy('WEIGHT')">Weight / Unit <i class="fas" :class="getSortIcon('WEIGHT')"></i></th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="loading">
+                        <tr><td colspan="9" class="text-center py-4 text-muted">Loading inventory…</td></tr>
+                    </tbody>
+                    <tbody v-else-if="!records.length">
+                        <tr><td colspan="9" class="text-center py-4 text-muted">No bin records found.</td></tr>
+                    </tbody>
+                    <tbody v-else>
+                        <tr v-for="row in records" :key="row.BIN_ID">
+                            <td>
+                                <img v-if="row.IMAGE" :src="row.IMAGE" class="item-thumb" :alt="row.ITEM_CODE" @error="onImgError($event)">
+                                <div v-else class="item-thumb d-flex align-items-center justify-content-center text-muted"><i class="fas fa-image"></i></div>
+                            </td>
+                            <td class="fw-bold">{{ row.ITEM_CODE }}</td>
+                            <td :title="row.ITEM_NAME">{{ row.ITEM_NAME }}</td>
+                            <td>{{ row.WAREHOUSE }}</td>
+                            <td>
+                                <span :class="row.ACTUAL_QTY ? 'qty-pos' : 'qty-zero'">{{ formatQty(row.ACTUAL_QTY) }}</span>
+                                <span class="text-muted small">{{ row.STOCK_UOM || row.BIN_UOM || '' }}</span>
+                            </td>
+                            <td>
+                                <input v-if="editingRows[row.BIN_ID]" type="text" class="form-control form-control-sm p-1" v-model="editingRows[row.BIN_ID].BRAND" list="imBrandList">
+                                <span v-else>{{ row.BRAND || '—' }}</span>
+                            </td>
+                            <td>
+                                <input v-if="editingRows[row.BIN_ID]" type="text" class="form-control form-control-sm p-1" v-model="editingRows[row.BIN_ID].PART_NUMBER">
+                                <span v-else>{{ row.part_number || '—' }}</span>
+                            </td>
+                            <td>
+                                <div v-if="editingRows[row.BIN_ID]" class="d-flex gap-1">
+                                    <input type="number" step="0.001" class="form-control form-control-sm p-1" v-model="editingRows[row.BIN_ID].WEIGHT_PER_UNIT" style="width: 70px;">
+                                    <input type="text" class="form-control form-control-sm p-1" v-model="editingRows[row.BIN_ID].WEIGHT_UOM" list="imUomList" style="width: 60px;" placeholder="UOM">
+                                </div>
+                                <span v-else>
+                                    {{ row.WEIGHT_PER_UNIT ? formatQty(row.WEIGHT_PER_UNIT) : '—' }}
+                                    <span class="text-muted">{{ row.WEIGHT_UOM || '' }}</span>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1 flex-wrap">
+                                    <template v-if="editingRows[row.BIN_ID]">
+                                        <button class="btn btn-xs btn-success py-0 px-2" @click="saveRow(row)" :disabled="savingKey === row.BIN_ID">
+                                            <i class="fas" :class="savingKey === row.BIN_ID ? 'fa-circle-notch fa-spin' : 'fa-save'"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-secondary py-0 px-2" @click="cancelEdit(row.BIN_ID)">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </template>
+                                    <template v-else>
+                                        <button class="btn btn-xs btn-outline-primary py-0 px-2" title="Edit details" @click="startEdit(row)">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-xs btn-outline-secondary py-0 px-2" title="Expanded details" @click="openDetails(row)">
+                                            <i class="fas fa-info-circle"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-if="activeTab === 'price_lists' && plView === 'lists'" class="list-view">
+                <table class="custom-table">
+                    <colgroup>
+                        <col style="width: 240px;">
+                        <col style="width: 90px;">
+                        <col style="width: 110px;">
+                        <col style="width: 220px;">
+                        <col style="width: 280px;">
+                        <col style="width: 140px;">
+                        <col style="width: 90px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="cursor-pointer" @click="sortPriceLists('PRICE_LIST')">Price List <i class="fas" :class="getPlSortIcon('PRICE_LIST')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceLists('CURRENCY')">Currency <i class="fas" :class="getPlSortIcon('CURRENCY')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceLists('ITEM_COUNT')">Items <i class="fas" :class="getPlSortIcon('ITEM_COUNT')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceLists('VALID_FROM')">Validity Range <i class="fas" :class="getPlSortIcon('VALID_FROM')"></i></th>
+                            <th>Assigned To</th>
+                            <th>Type</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="plLoading">
+                        <tr><td colspan="7" class="text-center py-4 text-muted">Loading price lists…</td></tr>
+                    </tbody>
+                    <tbody v-else-if="!priceLists.length">
+                        <tr><td colspan="7" class="text-center py-4 text-muted">No price lists found.</td></tr>
+                    </tbody>
+                    <tbody v-else>
+                        <tr v-for="pl in priceLists" :key="pl.PRICE_LIST" class="cursor-pointer" @click="openPriceList(pl)">
+                            <td class="fw-bold">
+                                {{ pl.PRICE_LIST }}
+                                <span v-if="!pl.ENABLED" class="badge bg-secondary ms-1" style="font-size: 10px;">Disabled</span>
+                            </td>
+                            <td>{{ pl.CURRENCY || '—' }}</td>
+                            <td>
+                                <span class="fw-bold">{{ (pl.ITEM_COUNT || 0).toLocaleString() }}</span>
+                            </td>
+                            <td>{{ formatValidityRange(pl.VALID_FROM, pl.VALID_UNTIL || pl.VALID_UPTO || pl.DEADLINE) }}</td>
+                            <td :title="pl.assigned_to || ''">
+                                <span v-if="pl.assigned_to">{{ pl.assigned_to }}</span>
+                                <span v-else class="text-muted">Unassigned</span>
+                            </td>
+                            <td>
+                                <span v-if="pl.SELLING" class="badge bg-primary me-1">Selling</span>
+                                <span v-if="pl.BUYING" class="badge bg-success">Buying</span>
+                            </td>
+                            <td @click.stop>
+                                <button class="btn btn-xs btn-outline-danger py-0 px-2"
+                                        title="Delete price list"
+                                        :disabled="deletingPriceList === pl.PRICE_LIST"
+                                        @click.stop="deletePriceList(pl)">
+                                    <i class="fas" :class="deletingPriceList === pl.PRICE_LIST ? 'fa-circle-notch fa-spin' : 'fa-trash'"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div v-if="activeTab === 'price_lists' && plView === 'items'" class="list-view">
+                <table class="custom-table">
+                    <colgroup>
+                        <col style="width: 56px;">
+                        <col style="width: 130px;">
+                        <col style="width: 220px;">
+                        <col style="width: 140px;">
+                        <col style="width: 160px;">
+                        <col style="width: 120px;">
+                        <col style="width: 160px;">
+                        <col style="width: 180px;">
+                        <col style="width: 90px;">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Pic</th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('ITEM_CODE')">Item ID <i class="fas" :class="getPlSortIcon('ITEM_CODE')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('ITEM_NAME')">Item Name <i class="fas" :class="getPlSortIcon('ITEM_NAME')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('BRAND')">Brand <i class="fas" :class="getPlSortIcon('BRAND')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('PART_NUMBER')">Part Number <i class="fas" :class="getPlSortIcon('PART_NUMBER')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('RATE')">Rate <i class="fas" :class="getPlSortIcon('RATE')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('VALID_FROM')">Valid Range <i class="fas" :class="getPlSortIcon('VALID_FROM')"></i></th>
+                            <th class="cursor-pointer" @click="sortPriceListItems('DEADLINE')">Deadline <i class="fas" :class="getPlSortIcon('DEADLINE')"></i></th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody v-if="plLoading">
+                        <tr><td colspan="9" class="text-center py-4 text-muted">Loading price list items…</td></tr>
+                    </tbody>
+                    <tbody v-else-if="!priceListItems.length">
+                        <tr><td colspan="9" class="text-center py-4 text-muted">No items in this price list.</td></tr>
+                    </tbody>
+                    <tbody v-else>
+                        <tr v-for="row in priceListItems" :key="row.ITEM_PRICE_ID">
+                            <td @click="openDetails({ ITEM_CODE: row.ITEM_CODE })">
+                                <img v-if="row.IMAGE" :src="row.IMAGE" class="item-thumb" :alt="row.ITEM_CODE" @error="onImgError($event)">
+                                <div v-else class="item-thumb d-flex align-items-center justify-content-center text-muted"><i class="fas fa-image"></i></div>
+                            </td>
+                            <td class="fw-bold cursor-pointer" @click="openDetails({ ITEM_CODE: row.ITEM_CODE })">{{ row.ITEM_CODE }}</td>
+                            <td class="cursor-pointer" :title="row.ITEM_NAME" @click="openDetails({ ITEM_CODE: row.ITEM_CODE })">{{ row.ITEM_NAME }}</td>
+                            <td>{{ row.BRAND || '—' }}</td>
+                            <td>{{ row.part_number || '—' }}</td>
+                            <td>
+                                {{ formatMoney(row.RATE) }}
+                                <span class="text-muted small">{{ row.CURRENCY || '' }}</span>
+                            </td>
+                            <td>{{ formatValidityRange(row.VALID_FROM, row.VALID_UPTO) }}</td>
+                            <td>
+                                <div class="d-flex align-items-center gap-1">
+                                    <input type="datetime-local"
+                                           class="form-control form-control-sm p-1"
+                                           style="min-width: 150px; font-size: 11px;"
+                                           :value="toDatetimeLocal(row.deadline)"
+                                           @change="saveDeadline(row, $event.target.value)">
+                                </div>
+                            </td>
+                            <td>
+                                <button class="btn btn-xs btn-outline-secondary py-0 px-2" title="Item details" @click="openDetails({ ITEM_CODE: row.ITEM_CODE })">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <datalist id="imBrandList">
+                <option v-for="b in brands" :key="b" :value="b"></option>
+            </datalist>
+            <datalist id="imUomList">
+                <option v-for="u in uoms" :key="u" :value="u"></option>
+            </datalist>
+        </div>
+
+        <div v-if="showDetailsModal" class="modal-overlay" @click.self="closeDetails">
+            <div class="item-modal-content">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="mb-0 fw-bold">{{ detailsForm.item_code }}</h5>
+                        <div class="text-muted small">{{ detailsForm.item_name }}</div>
+                    </div>
+                    <button class="btn btn-sm btn-light" @click="closeDetails"><i class="fas fa-times"></i></button>
+                </div>
+
+                <div v-if="detailsLoading" class="text-center py-4 text-muted">Loading details…</div>
+                <div v-else>
+                    <div class="row g-3">
+                        <div class="col-auto">
+                            <img v-if="detailsForm.image" :src="detailsForm.image" class="item-thumb-lg" :alt="detailsForm.item_code" @error="onImgError($event)">
+                            <div v-else class="item-thumb-lg d-flex align-items-center justify-content-center text-muted"><i class="fas fa-image fa-2x"></i></div>
+                            <div class="d-flex flex-column gap-1 mt-2">
+                                <button type="button"
+                                        class="btn btn-xs btn-outline-primary py-0 px-2"
+                                        :disabled="uploadingImage || !detailsForm.item_code"
+                                        @click="$refs.imageFileInput && $refs.imageFileInput.click()">
+                                    <i class="fas" :class="uploadingImage ? 'fa-circle-notch fa-spin' : 'fa-camera'"></i>
+                                    {{ detailsForm.image ? 'Change Photo' : 'Add Photo' }}
+                                </button>
+                                <button v-if="detailsForm.image"
+                                        type="button"
+                                        class="btn btn-xs btn-outline-danger py-0 px-2"
+                                        :disabled="uploadingImage"
+                                        @click="clearItemImage">
+                                    <i class="fas fa-trash"></i> Remove Photo
+                                </button>
+                                <input ref="imageFileInput"
+                                       type="file"
+                                       accept="image/*"
+                                       class="d-none"
+                                       @change="onImageFileSelected">
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Brand</label>
+                                    <input class="form-control form-control-sm" v-model="detailsForm.brand" list="imBrandList">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Part Number</label>
+                                    <input class="form-control form-control-sm" v-model="detailsForm.part_number" :disabled="!partNumberField">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Item Group</label>
+                                    <input class="form-control form-control-sm" :value="detailsForm.item_group" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Weight / Unit</label>
+                                    <div class="d-flex gap-1">
+                                        <input type="number" step="0.001" class="form-control form-control-sm" v-model="detailsForm.weight_per_unit">
+                                        <input class="form-control form-control-sm" v-model="detailsForm.weight_uom" list="imUomList" placeholder="UOM" style="max-width: 90px;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1">Stock UOM</label>
+                            <div class="ac-wrap">
+                                <input class="form-control form-control-sm"
+                                       v-model="detailsForm.stock_uom"
+                                       placeholder="Search UOM…"
+                                       @focus="searchUoms(detailsForm.stock_uom)"
+                                       @input="searchUoms(detailsForm.stock_uom)">
+                                <div v-if="uomResults.length" class="ac-list">
+                                    <div class="ac-item" v-for="u in uomResults" :key="u" @mousedown.prevent="selectUom(u)">{{ u }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1">Customs Tariff Number</label>
+                            <div class="ac-wrap">
+                                <input class="form-control form-control-sm"
+                                       v-model="detailsForm.customs_tariff_number"
+                                       placeholder="Search tariff…"
+                                       @focus="searchTariffs(detailsForm.customs_tariff_number)"
+                                       @input="searchTariffs(detailsForm.customs_tariff_number)">
+                                <div v-if="tariffResults.length || showCreateTariffOption" class="ac-list">
+                                    <div class="ac-item" v-for="t in tariffResults" :key="t.name" @mousedown.prevent="selectTariff(t)">
+                                        <div class="fw-bold">{{ t.name }}</div>
+                                        <div class="text-muted" v-if="t.description" style="font-size: 11px;">{{ t.description }}</div>
+                                    </div>
+                                    <div v-if="showCreateTariffOption"
+                                         class="ac-item text-primary fw-bold"
+                                         @mousedown.prevent="createTariffFromInput">
+                                        <i class="fas" :class="creatingTariff ? 'fa-circle-notch fa-spin' : 'fa-plus'"></i>
+                                        Create new tariff code “{{ (detailsForm.customs_tariff_number || '').trim() }}”
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1">Country of Origin</label>
+                            <div class="ac-wrap">
+                                <input class="form-control form-control-sm"
+                                       v-model="detailsForm.country_of_origin"
+                                       placeholder="Search country…"
+                                       @focus="searchCountries(detailsForm.country_of_origin)"
+                                       @input="searchCountries(detailsForm.country_of_origin)">
+                                <div v-if="countryResults.length" class="ac-list">
+                                    <div class="ac-item" v-for="c in countryResults" :key="c" @mousedown.prevent="selectCountry(c)">{{ c }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold mb-1">Data Sheet</label>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <a v-if="detailsForm.custom_data_sheet"
+                                   class="small fw-bold"
+                                   :href="detailsForm.custom_data_sheet"
+                                   target="_blank"
+                                   rel="noopener">
+                                    <i class="fas fa-file-alt me-1"></i>{{ fileNameFromUrl(detailsForm.custom_data_sheet) }}
+                                </a>
+                                <span v-else class="text-muted small">No data sheet attached.</span>
+                                <button type="button"
+                                        class="btn btn-xs btn-outline-primary py-0 px-2"
+                                        :disabled="uploadingDataSheet || !detailsForm.item_code"
+                                        @click="$refs.dataSheetFileInput && $refs.dataSheetFileInput.click()">
+                                    <i class="fas" :class="uploadingDataSheet ? 'fa-circle-notch fa-spin' : 'fa-upload'"></i>
+                                    {{ detailsForm.custom_data_sheet ? 'Change' : 'Attach' }}
+                                </button>
+                                <button v-if="detailsForm.custom_data_sheet"
+                                        type="button"
+                                        class="btn btn-xs btn-outline-danger py-0 px-2"
+                                        :disabled="uploadingDataSheet"
+                                        @click="clearDataSheet">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                                <input ref="dataSheetFileInput"
+                                       type="file"
+                                       class="d-none"
+                                       @change="onDataSheetFileSelected">
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-bold mb-1">Description</label>
+                            <textarea class="form-control form-control-sm" rows="3" v-model="detailsForm.description"></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <div class="small fw-bold">Customer Items</div>
+                                <button class="btn btn-xs btn-outline-primary py-0 px-2" @click="addCustomerItem">
+                                    <i class="fas fa-plus me-1"></i>Add Customer
+                                </button>
+                            </div>
+                            <table class="table table-sm table-bordered mb-0" style="font-size: 12px;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 36%;">Customer Name</th>
+                                        <th style="width: 22%;">Commodity Type</th>
+                                        <th style="width: 32%;">Ref Code</th>
+                                        <th style="width: 10%;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(ci, idx) in detailsForm.customer_items" :key="ci._key">
+                                        <td>
+                                            <div class="ac-wrap">
+                                                <input class="form-control form-control-sm"
+                                                       v-model="ci.customer_name"
+                                                       placeholder="Search customer…"
+                                                       @focus="searchCustomers(idx, ci.customer_name)"
+                                                       @input="searchCustomers(idx, ci.customer_name)">
+                                                <div v-if="activeCustomerRow === idx && customerResults.length" class="ac-list">
+                                                    <div class="ac-item" v-for="cust in customerResults" :key="cust.name" @mousedown.prevent="selectCustomer(idx, cust)">
+                                                        <div class="fw-bold">{{ cust.customer_name || cust.name }}</div>
+                                                        <div class="text-muted" style="font-size: 11px;">{{ cust.name }} <span v-if="cust.customer_group">· {{ cust.customer_group }}</span></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="text-muted" style="font-size: 10px;" v-if="ci.customer_group">{{ ci.customer_group }}</div>
+                                        </td>
+                                        <td>
+                                            <input class="form-control form-control-sm" v-model="ci.commodity_type" placeholder="Commodity type">
+                                        </td>
+                                        <td>
+                                            <input class="form-control form-control-sm" v-model="ci.ref_code" placeholder="Ref code">
+                                        </td>
+                                        <td class="text-center">
+                                            <button class="btn btn-xs btn-outline-danger py-0 px-2" @click="removeCustomerItem(idx)" title="Remove">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    <tr v-if="!detailsForm.customer_items.length">
+                                        <td colspan="4" class="text-muted text-center py-3">No customer item links. Click Add Customer.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="text-muted small mb-1">Stock by Warehouse</div>
+                            <table class="table table-sm table-bordered mb-0" style="font-size: 12px;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Warehouse</th>
+                                        <th>Actual</th>
+                                        <th>Ordered</th>
+                                        <th>Reserved</th>
+                                        <th>Projected</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="b in (detailsForm.bins || [])" :key="b.BIN_ID" :class="detailWarehouse && b.warehouse === detailWarehouse ? 'table-info' : ''">
+                                        <td>{{ b.warehouse }}</td>
+                                        <td>{{ formatQty(b.actual_qty) }}</td>
+                                        <td>{{ formatQty(b.ordered_qty) }}</td>
+                                        <td>{{ formatQty(b.reserved_qty) }}</td>
+                                        <td>{{ formatQty(b.projected_qty) }}</td>
+                                    </tr>
+                                    <tr v-if="!(detailsForm.bins || []).length"><td colspan="5" class="text-muted">No bin rows.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="col-12 d-flex justify-content-end gap-2">
+                            <a class="btn btn-sm btn-outline-secondary"
+                               :href="'https://glintranet.com/app/item/' + encodeURIComponent(detailsForm.item_code)"
+                               target="_blank">Open Item in ERPNext</a>
+                            <button class="btn btn-sm btn-light" @click="closeDetails">Cancel</button>
+                            <button class="btn btn-sm btn-primary" @click="saveDetailsForm" :disabled="savingDetails">
+                                <i class="fas" :class="savingDetails ? 'fa-circle-notch fa-spin' : 'fa-save'"></i>
+                                {{ savingDetails ? 'Saving…' : 'Save Details' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+{% endraw %}
+
+<script>
+    const { createApp } = Vue;
+    createApp({
+        data() {
+            return {
+                isLoggedIn: false,
+                loginUsername: '',
+                loginPassword: '',
+                loginError: '',
+                isLoggingIn: false,
+
+                activeTab: 'inventory',
+                records: [],
+                loading: false,
+                currentPage: 1,
+                totalPages: 1,
+                totalRecords: 0,
+                pageLength: 50,
+                searchInput: '',
+                searchQuery: '',
+                sortField: 'ITEM_CODE',
+                sortOrder: 'asc',
+                warehouseFilter: '',
+                hideZeroQty: true,
+                warehouses: [],
+                brands: [],
+                uoms: [],
+                partNumberField: null,
+
+                plView: 'lists',
+                plLoading: false,
+                priceLists: [],
+                priceListItems: [],
+                selectedPriceList: null,
+                plCurrentPage: 1,
+                plTotalPages: 1,
+                plTotalRecords: 0,
+                plPageLength: 50,
+                plSearchInput: '',
+                plSearchQuery: '',
+                plSortField: 'PRICE_LIST',
+                plSortOrder: 'asc',
+                plHideDisabled: true,
+                plDeadlineField: null,
+                savingDeadlineId: '',
+                deletingPriceList: '',
+
+                editingRows: {},
+                savingKey: '',
+
+                showDetailsModal: false,
+                detailsLoading: false,
+                savingDetails: false,
+                detailWarehouse: '',
+                detailsForm: {
+                    item_code: '',
+                    item_name: '',
+                    item_group: '',
+                    brand: '',
+                    part_number: '',
+                    image: '',
+                    custom_data_sheet: '',
+                    description: '',
+                    stock_uom: '',
+                    customs_tariff_number: '',
+                    country_of_origin: '',
+                    weight_per_unit: 0,
+                    weight_uom: '',
+                    bins: [],
+                    customer_items: []
+                },
+                uploadingImage: false,
+                uploadingDataSheet: false,
+                tariffKnownExact: '',
+                creatingTariff: false,
+                customerResults: [],
+                countryResults: [],
+                tariffResults: [],
+                uomResults: [],
+                activeCustomerRow: null,
+                _custTimer: null,
+                _countryTimer: null,
+                _tariffTimer: null,
+                _uomTimer: null
+            };
+        },
+		
+		computed: {
+            showCreateTariffOption() {
+                const q = String(this.detailsForm.customs_tariff_number || '').trim();
+                if (!q || this.creatingTariff) return false;
+                const needle = q.toLowerCase();
+                if (String(this.tariffKnownExact || '').trim().toLowerCase() === needle) {
+                    return false;
+                }
+                const exact = (this.tariffResults || []).some((t) => {
+                    const name = String((t && t.name) || '').trim().toLowerCase();
+                    const num = String((t && t.tariff_number) || '').trim().toLowerCase();
+                    return name === needle || num === needle;
+                });
+                return !exact;
+            }
+        },
+		
+		
+        methods: {
+            callMethod(method, args, callback, errorCallback) {
+			const csrf = (typeof frappe !== 'undefined' && frappe.csrf_token)
+				? frappe.csrf_token
+				: (document.cookie.match(/(?:^|; )csrf_token=([^;]+)/) || [])[1];
+			const body = new URLSearchParams();
+			Object.keys(args || {}).forEach((k) => {
+				const v = args[k];
+				body.append(k, v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : v));
+			});
+			const headers = {
+				'Accept': 'application/json',
+				'Content-Type': 'application/x-www-form-urlencoded'
+			};
+			if (csrf) headers['X-Frappe-CSRF-Token'] = decodeURIComponent(csrf);
+			fetch('/api/method/' + method, {
+				method: 'POST',
+				credentials: 'same-origin',
+				cache: 'no-store',
+				headers: headers,
+				body: body.toString()
+			})
+			.then((res) => {
+				if (!res.ok) {
+					return res.text().then((txt) => {
+						throw new Error('HTTP ' + res.status + ' ' + (txt || '').slice(0, 200));
+					});
+				}
+				return res.json();
+			})
+			.then((data) => callback && callback(data))
+			.catch((err) => {
+				if (errorCallback) errorCallback(err);
+				else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+					frappe.msgprint({
+						title: 'Request failed',
+						indicator: 'red',
+						message: (err && err.message) || 'Could not reach the server.'
+					});
+				}
+			});
+		},
+            formatQty(val) {
+                const n = Number(val || 0);
+                if (!n) return '0';
+                return n.toLocaleString(undefined, { maximumFractionDigits: 3 });
+            },
+            getSortIcon(field) {
+                if (this.sortField !== field) return 'fa-sort text-muted';
+                return this.sortOrder === 'asc' ? 'fa-sort-up text-primary' : 'fa-sort-down text-primary';
+            },
+            sortBy(field) {
+                if (this.sortField === field) {
+                    this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.sortField = field;
+                    this.sortOrder = field === 'ACTUAL_QTY' || field === 'WEIGHT' ? 'desc' : 'asc';
+                }
+                this.currentPage = 1;
+                this.fetchData();
+            },
+            changePage(delta) {
+                const next = this.currentPage + delta;
+                if (next < 1 || next > this.totalPages) return;
+                this.currentPage = next;
+                this.fetchData();
+            },
+            applySearch() {
+                this.searchQuery = (this.searchInput || '').trim();
+                this.currentPage = 1;
+                this.fetchData();
+            },
+            clearSearch() {
+                this.searchInput = '';
+                this.searchQuery = '';
+                this.currentPage = 1;
+                this.fetchData();
+            },
+            manualRefresh() {
+                this.fetchWarehouses();
+                if (this.activeTab === 'price_lists') {
+                    this.fetchPriceListView();
+                } else {
+                    this.fetchData();
+                }
+            },
+            switchTab(tab) {
+                this.activeTab = tab;
+                if (tab === 'price_lists') {
+                    this.fetchPriceListView();
+                } else if (tab === 'inventory' && !this.records.length) {
+                    this.fetchData();
+                }
+            },
+            formatMoney(val) {
+                const n = Number(val || 0);
+                if (!n) return '0';
+                return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+            },
+            formatDateVal(val) {
+                if (!val) return '';
+                const raw = String(val);
+                return raw.length >= 10 ? raw.slice(0, 10) : raw;
+            },
+            formatDateTimeVal(val) {
+                if (!val) return '';
+                const raw = String(val).replace('T', ' ');
+                return raw.length >= 16 ? raw.slice(0, 16) : raw;
+            },
+            formatValidityRange(fromVal, untilVal) {
+                const from = this.formatDateVal(fromVal);
+                const until = this.formatDateVal(untilVal) || this.formatDateTimeVal(untilVal);
+                if (!from && !until) return 'No date range';
+                if (from && until) return from + ' → ' + until;
+                if (from) return 'From ' + from;
+                return 'Until ' + until;
+            },
+            toDatetimeLocal(val) {
+                if (!val) return '';
+                const raw = String(val).trim().replace(' ', 'T');
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw + 'T00:00';
+                return '';
+            },
+            getPlSortIcon(field) {
+                if (this.plSortField !== field) return 'fa-sort text-muted';
+                return this.plSortOrder === 'asc' ? 'fa-sort-up text-primary' : 'fa-sort-down text-primary';
+            },
+            changePlPage(delta) {
+                const next = this.plCurrentPage + delta;
+                if (next < 1 || next > this.plTotalPages) return;
+                this.plCurrentPage = next;
+                this.fetchPriceListView();
+            },
+            applyPriceListSearch() {
+                this.plSearchQuery = (this.plSearchInput || '').trim();
+                this.plCurrentPage = 1;
+                this.fetchPriceListView();
+            },
+            clearPriceListSearch() {
+                this.plSearchInput = '';
+                this.plSearchQuery = '';
+                this.plCurrentPage = 1;
+                this.fetchPriceListView();
+            },
+            fetchPriceListView() {
+                if (this.plView === 'items' && this.selectedPriceList && this.selectedPriceList.PRICE_LIST) {
+                    this.fetchPriceListItems();
+                } else {
+                    this.fetchPriceLists();
+                }
+            },
+            fetchPriceLists() {
+                this.plLoading = true;
+                this.callMethod('my_custom_app.item_management.get_price_lists', {
+                    page: this.plCurrentPage,
+                    page_length: this.plPageLength,
+                    sort_by: this.plSortField,
+                    sort_order: this.plSortOrder,
+                    search_query: this.plSearchQuery || '',
+                    hide_disabled: this.plHideDisabled ? 1 : 0
+                }, (r) => {
+                    this.plLoading = false;
+                    if (r.message && r.message.status === 'success') {
+                        this.priceLists = r.message.data || [];
+                        this.plTotalRecords = r.message.total_records || 0;
+                        this.plTotalPages = r.message.total_pages || 1;
+                        this.plDeadlineField = r.message.deadline_field || this.plDeadlineField;
+                    } else {
+                        this.priceLists = [];
+                        if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                            frappe.msgprint({ title: 'Price Lists Error', indicator: 'red', message: (r.message && r.message.error) || 'Failed to load price lists.' });
+                        }
+                    }
+                }, () => { this.plLoading = false; });
+            },
+            fetchPriceListItems() {
+                const name = this.selectedPriceList && this.selectedPriceList.PRICE_LIST;
+                if (!name) {
+                    this.plView = 'lists';
+                    this.fetchPriceLists();
+                    return;
+                }
+                this.plLoading = true;
+                this.callMethod('my_custom_app.item_management.get_price_list_items', {
+                    price_list: name,
+                    page: this.plCurrentPage,
+                    page_length: this.plPageLength,
+                    sort_by: this.plSortField,
+                    sort_order: this.plSortOrder,
+                    search_query: this.plSearchQuery || ''
+                }, (r) => {
+                    this.plLoading = false;
+                    if (r.message && r.message.status === 'success') {
+                        this.priceListItems = r.message.data || [];
+                        this.plTotalRecords = r.message.total_records || 0;
+                        this.plTotalPages = r.message.total_pages || 1;
+                        this.plDeadlineField = r.message.deadline_field || this.plDeadlineField;
+                        this.partNumberField = r.message.part_number_field || this.partNumberField;
+                        if (r.message.price_list) {
+                            this.selectedPriceList = Object.assign({}, this.selectedPriceList || {}, r.message.price_list);
+                        }
+                    } else {
+                        this.priceListItems = [];
+                        if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                            frappe.msgprint({ title: 'Price List Items Error', indicator: 'red', message: (r.message && r.message.error) || 'Failed to load price list items.' });
+                        }
+                    }
+                }, () => { this.plLoading = false; });
+            },
+            sortPriceLists(field) {
+                if (this.plSortField === field) {
+                    this.plSortOrder = this.plSortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.plSortField = field;
+                    this.plSortOrder = field === 'ITEM_COUNT' ? 'desc' : 'asc';
+                }
+                this.plCurrentPage = 1;
+                this.fetchPriceLists();
+            },
+            sortPriceListItems(field) {
+                if (this.plSortField === field) {
+                    this.plSortOrder = this.plSortOrder === 'asc' ? 'desc' : 'asc';
+                } else {
+                    this.plSortField = field;
+                    this.plSortOrder = (field === 'RATE' || field === 'DEADLINE') ? 'desc' : 'asc';
+                }
+                this.plCurrentPage = 1;
+                this.fetchPriceListItems();
+            },
+            openPriceList(pl) {
+                this.selectedPriceList = pl;
+                this.plView = 'items';
+                this.plCurrentPage = 1;
+                this.plSearchInput = '';
+                this.plSearchQuery = '';
+                this.plSortField = 'ITEM_CODE';
+                this.plSortOrder = 'asc';
+                this.fetchPriceListItems();
+            },
+            closePriceList() {
+                this.plView = 'lists';
+                this.selectedPriceList = null;
+                this.priceListItems = [];
+                this.plCurrentPage = 1;
+                this.plSearchInput = '';
+                this.plSearchQuery = '';
+                this.plSortField = 'PRICE_LIST';
+                this.plSortOrder = 'asc';
+                this.fetchPriceLists();
+            },
+            deletePriceList(pl) {
+                const name = pl && pl.PRICE_LIST;
+                if (!name) return;
+                const itemCount = Number(pl.ITEM_COUNT || 0);
+                const assigned = pl.assigned_to ? (' Assigned to: ' + pl.assigned_to + '.') : '';
+                const msg = 'Delete price list "' + name + '"'
+                    + (itemCount ? (' and its ' + itemCount.toLocaleString() + ' item price row(s)') : '')
+                    + '?' + assigned
+                    + ' This cannot be undone.';
+                if (!window.confirm(msg)) return;
+                this.deletingPriceList = name;
+                this.callMethod('my_custom_app.item_management.delete_price_list', {
+                    price_list: name
+                }, (r) => {
+                    this.deletingPriceList = '';
+                    if (r.message && r.message.status === 'success') {
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Price list deleted', indicator: 'green' });
+                        }
+                        if (this.selectedPriceList && this.selectedPriceList.PRICE_LIST === name) {
+                            this.closePriceList();
+                        } else {
+                            this.fetchPriceLists();
+                        }
+                    } else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                        frappe.msgprint({ title: 'Delete Failed', indicator: 'red', message: (r.message && r.message.error) || 'Could not delete price list.' });
+                    }
+                }, () => { this.deletingPriceList = ''; });
+            },
+            saveDeadline(row, value) {
+                if (!row || !row.ITEM_PRICE_ID) return;
+                this.savingDeadlineId = row.ITEM_PRICE_ID;
+                this.callMethod('my_custom_app.item_management.update_item_price_deadline', {
+                    item_price_id: row.ITEM_PRICE_ID,
+                    deadline: value || ''
+                }, (r) => {
+                    this.savingDeadlineId = '';
+                    if (r.message && r.message.status === 'success') {
+                        row.deadline = r.message.deadline || value || '';
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Deadline saved', indicator: 'green' });
+                        }
+                    } else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                        frappe.msgprint({ title: 'Deadline Save Failed', indicator: 'red', message: (r.message && r.message.error) || 'Could not save deadline.' });
+                    }
+                }, () => { this.savingDeadlineId = ''; });
+            },
+            onImgError(e) {
+                e.target.style.display = 'none';
+            },
+            fetchWarehouses() {
+                this.callMethod('my_custom_app.item_management.get_warehouses', {}, (r) => {
+                    if (r.message && r.message.status === 'success') {
+                        this.warehouses = r.message.data || [];
+                    }
+                });
+            },
+            fetchLookups() {
+                this.callMethod('my_custom_app.item_management.get_brands', {}, (r) => {
+                    if (r.message && r.message.status === 'success') this.brands = r.message.data || [];
+                });
+                this.callMethod('my_custom_app.item_management.get_uoms', {}, (r) => {
+                    if (r.message && r.message.status === 'success') this.uoms = r.message.data || [];
+                });
+            },
+            fetchData() {
+                this.loading = true;
+                this.callMethod('my_custom_app.item_management.get_inventory', {
+                    page: this.currentPage,
+                    page_length: this.pageLength,
+                    sort_by: this.sortField,
+                    sort_order: this.sortOrder,
+                    search_query: this.searchQuery || '',
+                    warehouse: this.warehouseFilter || '',
+                    hide_zero_qty: this.hideZeroQty ? 1 : 0
+                }, (r) => {
+                    this.loading = false;
+                    if (r.message && r.message.status === 'success') {
+                        this.records = r.message.data || [];
+                        this.totalRecords = r.message.total_records || 0;
+                        this.totalPages = r.message.total_pages || 1;
+                        this.partNumberField = r.message.part_number_field || this.partNumberField;
+                    } else {
+                        this.records = [];
+                        if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                            frappe.msgprint({ title: 'Inventory Error', indicator: 'red', message: (r.message && r.message.error) || 'Failed to load inventory.' });
+                        }
+                    }
+                }, () => {
+                    this.loading = false;
+                });
+            },
+            startEdit(row) {
+                this.editingRows = {
+                    ...this.editingRows,
+                    [row.BIN_ID]: {
+                        item_code: row.ITEM_CODE,
+                        BRAND: row.BRAND || '',
+                        PART_NUMBER: row.part_number || '',
+                        WEIGHT_PER_UNIT: row.WEIGHT_PER_UNIT || 0,
+                        WEIGHT_UOM: row.WEIGHT_UOM || ''
+                    }
+                };
+            },
+            cancelEdit(binId) {
+                const copy = { ...this.editingRows };
+                delete copy[binId];
+                this.editingRows = copy;
+            },
+            saveRow(row) {
+                const draft = this.editingRows[row.BIN_ID];
+                if (!draft) return;
+                this.savingKey = row.BIN_ID;
+                this.callMethod('my_custom_app.item_management.update_item_details', {
+                    payload: JSON.stringify({
+                        item_code: draft.item_code,
+                        brand: draft.BRAND,
+                        part_number: draft.PART_NUMBER,
+                        weight_per_unit: draft.WEIGHT_PER_UNIT,
+                        weight_uom: draft.WEIGHT_UOM
+                    })
+                }, (r) => {
+                    this.savingKey = '';
+                    if (r.message && r.message.status === 'success') {
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Item updated', indicator: 'green' });
+                        }
+                        this.cancelEdit(row.BIN_ID);
+                        this.fetchData();
+                    } else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                        frappe.msgprint({ title: 'Save Failed', indicator: 'red', message: (r.message && r.message.error) || 'Could not save item.' });
+                    }
+                }, () => { this.savingKey = ''; });
+            },
+            openDetails(row) {
+                this.showDetailsModal = true;
+                this.detailsLoading = true;
+                this.customerResults = [];
+                this.countryResults = [];
+                this.tariffResults = [];
+                this.uomResults = [];
+                this.activeCustomerRow = null;
+                this.detailWarehouse = row.WAREHOUSE || '';
+                this.callMethod('my_custom_app.item_management.get_item_details', {
+                    item_code: row.ITEM_CODE,
+                    warehouse: row.WAREHOUSE || ''
+                }, (r) => {
+                    this.detailsLoading = false;
+                    if (r.message && r.message.status === 'success') {
+                        const d = r.message.data || {};
+                        this.partNumberField = d.part_number_field || this.partNumberField;
+						this.tariffKnownExact = (d.customs_tariff_number || '').trim();
+                        this.detailsForm = {
+                            item_code: d.item_code || '',
+                            item_name: d.item_name || '',
+                            item_group: d.item_group || '',
+                            brand: d.brand || '',
+                            part_number: d.part_number || '',
+                            image: d.image || '',
+                            custom_data_sheet: d.custom_data_sheet || '',
+                            description: d.description_text || '',
+                            stock_uom: d.stock_uom || '',
+                            customs_tariff_number: d.customs_tariff_number || '',
+                            country_of_origin: d.country_of_origin || '',
+                            weight_per_unit: d.weight_per_unit || 0,
+                            weight_uom: d.weight_uom || '',
+                            bins: d.bins || [],
+                            customer_items: (d.customer_items || []).map((ci, i) => ({
+                                _key: (ci.name || 'new') + '-' + i,
+                                name: ci.name || '',
+                                customer_name: ci.customer_name || '',
+                                customer_group: ci.customer_group || '',
+                                commodity_type: ci.commodity_type || '',
+                                ref_code: ci.ref_code || ''
+                            }))
+                        };
+                    }
+                }, () => { this.detailsLoading = false; });
+            },
+            closeDetails() {
+                this.showDetailsModal = false;
+                this.customerResults = [];
+                this.countryResults = [];
+                this.tariffResults = [];
+                this.uomResults = [];
+                this.tariffKnownExact = '';
+                this.creatingTariff = false;
+                this.uploadingImage = false;
+                this.uploadingDataSheet = false;
+            },
+            addCustomerItem() {
+                this.detailsForm.customer_items.push({
+                    _key: 'new-' + Date.now(),
+                    name: '',
+                    customer_name: '',
+                    customer_group: '',
+                    commodity_type: '',
+                    ref_code: ''
+                });
+            },
+            removeCustomerItem(idx) {
+                this.detailsForm.customer_items.splice(idx, 1);
+                if (this.activeCustomerRow === idx) {
+                    this.activeCustomerRow = null;
+                    this.customerResults = [];
+                }
+            },
+            searchCustomers(idx, query) {
+                this.activeCustomerRow = idx;
+                clearTimeout(this._custTimer);
+                this._custTimer = setTimeout(() => {
+                    this.callMethod('my_custom_app.item_management.search_customers', { query: query || '' }, (r) => {
+                        if (this.activeCustomerRow !== idx) return;
+                        this.customerResults = (r.message && r.message.data) || [];
+                    });
+                }, 180);
+            },
+            selectCustomer(idx, cust) {
+                const row = this.detailsForm.customer_items[idx];
+                if (!row) return;
+                row.customer_name = cust.name;
+                row.customer_group = cust.customer_group || '';
+                this.activeCustomerRow = null;
+                this.customerResults = [];
+            },
+            searchCountries(query) {
+                clearTimeout(this._countryTimer);
+                this._countryTimer = setTimeout(() => {
+                    this.callMethod('my_custom_app.item_management.search_countries', { query: query || '' }, (r) => {
+                        this.countryResults = (r.message && r.message.data) || [];
+                    });
+                }, 180);
+            },
+            selectCountry(name) {
+                this.detailsForm.country_of_origin = name;
+                this.countryResults = [];
+            },
+            searchTariffs(query) {
+                clearTimeout(this._tariffTimer);
+                const typed = String(query || '').trim();
+                if (String(this.tariffKnownExact || '').trim().toLowerCase() !== typed.toLowerCase()) {
+                    this.tariffKnownExact = '';
+                }
+                this._tariffTimer = setTimeout(() => {
+                    this.callMethod('my_custom_app.item_management.search_customs_tariff', { query: typed }, (r) => {
+                        const rows = (r.message && r.message.data) || [];
+                        this.tariffResults = rows;
+                        const needle = typed.toLowerCase();
+                        const exact = rows.some((t) => {
+                            const name = String((t && t.name) || '').trim().toLowerCase();
+                            const num = String((t && t.tariff_number) || '').trim().toLowerCase();
+                            return name === needle || num === needle;
+                        });
+                        if (exact) {
+                            this.tariffKnownExact = typed;
+                        }
+                    });
+                }, 180);
+            },
+            selectTariff(t) {
+                const name = (t && t.name) || '';
+                this.detailsForm.customs_tariff_number = name;
+                this.tariffKnownExact = name;
+                this.tariffResults = [];
+            },
+            createTariffFromInput() {
+                const tariff = String(this.detailsForm.customs_tariff_number || '').trim();
+                if (!tariff || this.creatingTariff) return;
+                this.creatingTariff = true;
+                this.callMethod('my_custom_app.item_management.create_customs_tariff', {
+                    tariff_number: tariff,
+                    description: tariff
+                }, (r) => {
+                    this.creatingTariff = false;
+                    if (r.message && r.message.status === 'success') {
+                        const created = (r.message.data && r.message.data.name) || tariff;
+                        this.detailsForm.customs_tariff_number = created;
+                        this.tariffKnownExact = created;
+                        this.tariffResults = [];
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Tariff code ' + created + ' ready', indicator: 'green' });
+                        }
+                    } else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                        frappe.msgprint({ title: 'Tariff Create Failed', indicator: 'red', message: (r.message && r.message.error) || 'Could not create tariff code.' });
+                    }
+                }, () => { this.creatingTariff = false; });
+            },
+            searchUoms(query) {
+                clearTimeout(this._uomTimer);
+                this._uomTimer = setTimeout(() => {
+                    this.callMethod('my_custom_app.item_management.search_uoms', { query: query || '' }, (r) => {
+                        this.uomResults = (r.message && r.message.data) || [];
+                    });
+                }, 180);
+            },
+            selectUom(name) {
+                this.detailsForm.stock_uom = name;
+                this.uomResults = [];
+            },
+			
+			fileNameFromUrl(url) {
+                const raw = String(url || '').split('?')[0];
+                if (!raw) return '';
+                try {
+                    return decodeURIComponent(raw.split('/').pop() || raw);
+                } catch (e) {
+                    return raw.split('/').pop() || raw;
+                }
+            },
+            getCsrfToken() {
+                if (typeof frappe !== 'undefined' && frappe.csrf_token) {
+                    return frappe.csrf_token;
+                }
+                const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+                return match ? decodeURIComponent(match[1]) : '';
+            },
+            uploadAttachedFile(file, fieldname) {
+                const formData = new FormData();
+                formData.append('file', file, file.name);
+                formData.append('doctype', 'Item');
+                formData.append('docname', this.detailsForm.item_code);
+                formData.append('fieldname', fieldname);
+                formData.append('is_private', '0');
+                const headers = { 'Accept': 'application/json', 'X-Frappe-CSRF-Token': this.getCsrfToken() };
+                return fetch('/api/method/upload_file', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: headers,
+                    body: formData
+                }).then((res) => res.json()).then((data) => {
+                    const msg = data && data.message;
+                    const fileUrl = (msg && (msg.file_url || msg.file_name)) || (data && data.file_url) || '';
+                    if (!fileUrl) {
+                        throw new Error((data && (data._server_messages || data.exception || data.message)) || 'Upload failed.');
+                    }
+                    return fileUrl;
+                });
+            },
+            onDataSheetFileSelected(e) {
+                const file = e.target && e.target.files && e.target.files[0];
+                if (e.target) e.target.value = '';
+                if (!file || !this.detailsForm.item_code) return;
+                this.uploadingDataSheet = true;
+                this.uploadAttachedFile(file, 'custom_data_sheet')
+                    .then((fileUrl) => {
+                        this.detailsForm.custom_data_sheet = fileUrl;
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Data sheet uploaded. Click Save Details to keep it.', indicator: 'green' });
+                        }
+                    })
+                    .catch((err) => {
+                        if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                            frappe.msgprint({ title: 'Upload Failed', indicator: 'red', message: (err && err.message) || 'Could not upload data sheet.' });
+                        }
+                    })
+                    .finally(() => { this.uploadingDataSheet = false; });
+            },
+            clearDataSheet() {
+                this.detailsForm.custom_data_sheet = '';
+            },
+			
+			
+            saveDetailsForm() {
+                if (!this.detailsForm.item_code) return;
+                this.savingDetails = true;
+                this.callMethod('my_custom_app.item_management.update_item_details', {
+                    payload: JSON.stringify({
+                        item_code: this.detailsForm.item_code,
+                        brand: this.detailsForm.brand,
+                        part_number: this.detailsForm.part_number,
+                        image: this.detailsForm.image,
+                        custom_data_sheet: this.detailsForm.custom_data_sheet,
+                        description: this.detailsForm.description,
+                        stock_uom: this.detailsForm.stock_uom,
+                        customs_tariff_number: this.detailsForm.customs_tariff_number,
+                        country_of_origin: this.detailsForm.country_of_origin,
+                        weight_per_unit: this.detailsForm.weight_per_unit,
+                        weight_uom: this.detailsForm.weight_uom,
+                        customer_items: (this.detailsForm.customer_items || []).map((ci) => ({
+                            customer_name: ci.customer_name,
+                            customer_group: ci.customer_group,
+                            commodity_type: ci.commodity_type,
+                            ref_code: ci.ref_code
+                        }))
+                    })
+                }, (r) => {
+                    this.savingDetails = false;
+                    if (r.message && r.message.status === 'success') {
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Item details saved', indicator: 'green' });
+                        }
+                        this.closeDetails();
+                        this.fetchData();
+                    } else if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                        frappe.msgprint({ title: 'Save Failed', indicator: 'red', message: (r.message && r.message.error) || 'Could not save item.' });
+                    }
+                }, () => { this.savingDetails = false; });
+            },
+            doLogin() {
+                this.loginError = '';
+                if (!this.loginUsername || !this.loginPassword) {
+                    this.loginError = 'Please enter both username and password.';
+                    return;
+                }
+                this.isLoggingIn = true;
+                const typedUser = this.loginUsername.trim();
+                const typedPassword = this.loginPassword;
+                const finishError = (msg) => {
+                    this.isLoggingIn = false;
+                    this.loginError = msg || 'Invalid username or password.';
+                    this.loginPassword = '';
+                };
+                const cacheBustReload = () => {
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('_ts', String(Date.now()));
+                    window.location.replace(url.toString());
+                };
+                const postLogin = () => {
+                    const body = new URLSearchParams();
+                    body.append('usr', typedUser);
+                    body.append('pwd', typedPassword);
+                    return fetch('/api/method/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+                        body: body.toString(),
+                        credentials: 'same-origin',
+                        cache: 'no-store'
+                    })
+                    .then((res) => res.json())
+                    .then((data) => {
+                        if (data && (data.message === 'Logged In' || data.message === 'No App')) {
+                            this.isLoggingIn = false;
+                            cacheBustReload();
+                            return;
+                        }
+                        throw new Error((data && data.message) || 'Invalid username or password.');
+                    });
+                };
+                fetch('/api/method/logout', { method: 'POST', credentials: 'same-origin', cache: 'no-store' })
+                    .catch(() => {})
+                    .then(() => postLogin())
+                    .catch((err) => finishError(err && err.message ? err.message : 'Unable to reach the server.'));
+            },
+            initializeAfterLogin() {
+			this.fetchWarehouses();
+			this.fetchLookups();
+			this.fetchData();
+			const params = new URLSearchParams(window.location.search);
+			const itemCode = String(params.get('item') || '').trim();
+			if (itemCode && params.get('open_details') === '1') {
+			this.openDetails({ ITEM_CODE: itemCode });
+			}
+			},
+			
+			
+			
+			onImageFileSelected(e) {
+                const file = e.target && e.target.files && e.target.files[0];
+                if (e.target) e.target.value = '';
+                if (!file || !this.detailsForm.item_code) return;
+                this.uploadingImage = true;
+                this.uploadAttachedFile(file, 'image')
+                    .then((fileUrl) => {
+                        this.detailsForm.image = fileUrl;
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({ message: 'Photo uploaded. Click Save Details to keep it.', indicator: 'green' });
+                        }
+                    })
+                    .catch((err) => {
+                        if (typeof frappe !== 'undefined' && frappe.msgprint) {
+                            frappe.msgprint({ title: 'Upload Failed', indicator: 'red', message: (err && err.message) || 'Could not upload photo.' });
+                        }
+                    })
+                    .finally(() => { this.uploadingImage = false; });
+            },
+            clearItemImage() {
+                this.detailsForm.image = '';
+            },
+        },
+        created() {
+            const self = this;
+            self.isLoggedIn = false;
+
+            function startAppAs(user) {
+                if (typeof frappe !== 'undefined') {
+                    frappe.session = frappe.session || {};
+                    frappe.session.user = user;
+                }
+                self.isLoggedIn = true;
+                self.$nextTick(function () {
+                    setTimeout(function () {
+                        self.initializeAfterLogin();
+                    }, 150);
+                });
+            }
+
+            function verifyLoggedUser(attempt) {
+                attempt = attempt || 0;
+                fetch('/api/method/frappe.auth.get_logged_user?_=' + Date.now(), {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then((res) => res.json())
+                .then((data) => {
+                    const user = (data && data.message) ? String(data.message) : 'Guest';
+                    if (user && user !== 'Guest') {
+                        startAppAs(user);
+                    } else if (attempt < 8) {
+                        setTimeout(() => verifyLoggedUser(attempt + 1), 250);
+                    } else {
+                        self.isLoggedIn = false;
+                    }
+                })
+                .catch(() => {
+                    if (attempt < 8) {
+                        setTimeout(() => verifyLoggedUser(attempt + 1), 250);
+                        return;
+                    }
+                    const bootUser = (typeof frappe !== 'undefined' && frappe.session && frappe.session.user)
+                        ? frappe.session.user
+                        : 'Guest';
+                    if (bootUser && bootUser !== 'Guest') startAppAs(bootUser);
+                    else self.isLoggedIn = false;
+                });
+            }
+
+            setTimeout(() => verifyLoggedUser(0), 50);
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
